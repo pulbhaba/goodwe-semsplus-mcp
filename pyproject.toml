@@ -1,0 +1,19 @@
+[project]
+name = "goodwe-semsplus-mcp"
+version = "0.1.0"
+description = "Read-only MCP server for GoodWe SEMS+ Australia"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "mcp[cli]>=1.28,<2",
+  "httpx>=0.27.0",
+  "pydantic-settings>=2.2.0",
+  "python-dotenv>=1.0.0"
+]
+
+[project.scripts]
+goodwe-semsplus-mcp = "goodwe_mcp.server:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"

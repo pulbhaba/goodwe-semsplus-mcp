@@ -1,0 +1,630 @@
+openapi: 3.1.0
+info:
+  title: GoodWe SEMS+ observed API
+  version: 0.1.0
+  description: |
+    Editable working specification for GoodWe SEMS+ routes currently called by
+    this repository, plus the observed station chart request. GoodWe does not
+    publish a stable contract for these routes. Schemas marked as raw or
+    provisional should be refined from sanitized responses.
+
+    Existing portal routes use the API base returned/configured by this
+    application (`https://{region}-semsplus.goodwe.com/web/sems`). The chart
+    route was observed on the Australian gateway and is specified with its own
+    server. Chart parameter values are provisional, and long reporting periods
+    at fine dimensions can exceed gateway response limits. Chart response fields
+    remain undocumented and are returned raw by the MCP server.
+  x-observed-client-headers:
+    description: |
+      Authenticated requests from the current client also send X-Uid, X-Token,
+      X-Timestamp, neutral, currentLang, uuid, os, brand, Origin and Referer.
+      Origin/Referer are the regional SEMS+ portal origin. The client computes
+      X-Signature as base64(SHA256(timestamp + "@" + uid + "@" + token) + "@" + timestamp).
+    headers:
+      X-Uid: Derived from the session token's uid.
+      X-Token: Derived from the session token's token.
+      X-Timestamp: Derived from the session token's timestamp.
+      neutral: "0"
+      currentLang: "en"
+      uuid: Session UUID.
+      os: "Windows 10.0 desktop"
+      brand: "Firefox 159.0 en-US Australia/Brisbane"
+
+servers:
+  - url: https://{region}-semsplus.goodwe.com/web/sems
+    description: Regional SEMS+ API base used by the existing client.
+    variables:
+      region:
+        default: au
+        description: SEMS+ region code.
+
+tags:
+  - name: Authentication
+  - name: Station
+  - name: Device
+  - name: Charts
+
+paths:
+  /sems-user/api/v1/auth/cross-login:
+    post:
+      tags: [Authentication]
+      operationId: crossLogin
+      summary: Start a SEMS+ web session
+      description: Username/password login used by the repository client.
+      parameters:
+        - $ref: '#/components/parameters/InitialToken'
+        - $ref: '#/components/parameters/InitialSignature'
+        - $ref: '#/components/parameters/CurrentLanguage'
+        - $ref: '#/components/parameters/Neutral'
+        - $ref: '#/components/parameters/Uuid'
+        - $ref: '#/components/parameters/Os'
+        - $ref: '#/components/parameters/Brand'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [account, pwd, agreement, isLocal, isChinese]
+              properties:
+                account:
+                  type: string
+                pwd:
+                  type: string
+                  format: password
+                  writeOnly: true
+                agreement:
+                  type: integer
+                  const: 1
+                isLocal:
+                  type: boolean
+                  const: false
+                isChinese:
+                  type: boolean
+                  const: false
+            example:
+              account: user@example.com
+              pwd: redacted
+              agreement: 1
+              isLocal: false
+              isChinese: false
+      responses:
+        '200':
+          description: Login result. A successful response contains session data.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginEnvelope'
+        '4XX':
+          $ref: '#/components/responses/HttpError'
+        '5XX':
+          $ref: '#/components/responses/HttpError'
+
+  /sems-plant/api/stations/flow:
+    get:
+      tags: [Station]
+      operationId: getStationFlow
+      summary: Get current station energy flow
+      security:
+        - GoodWeSession: []
+          SignatureHeader: []
+      parameters:
+        - $ref: '#/components/parameters/StationIdQuery'
+      responses:
+        '200':
+          description: Raw flow data. Known fields include pSystem, pAc, pBat, pGrid, pConsum, soc and refreshTime.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelope'
+        '4XX':
+          $ref: '#/components/responses/HttpError'
+        '5XX':
+          $ref: '#/components/responses/HttpError'
+
+  /sems-plant/api/web/device/station/getDevicesByType:
+    get:
+      tags: [Device]
+      operationId: getDevicesByType
+      summary: List station devices by device type
+      security:
+        - GoodWeSession: []
+          SignatureHeader: []
+      parameters:
+        - $ref: '#/components/parameters/StationIdQuery'
+        - name: deviceType
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [INVERTER, ENERGY_STORAGE_INTEGRATED_CABINET, BATTERY, BAT_SYS]
+          description: Device type values queried by this repository.
+      responses:
+        '200':
+          description: Raw device list response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelope'
+        '4XX':
+          $ref: '#/components/responses/HttpError'
+        '5XX':
+          $ref: '#/components/responses/HttpError'
+
+  /sems-plant/api/equipments/{serial}/telemetry:
+    get:
+      tags: [Device]
+      operationId: getDeviceTelemetry
+      summary: Get live device telemetry
+      security:
+        - GoodWeSession: []
+          SignatureHeader: []
+      parameters:
+        - $ref: '#/components/parameters/DeviceSerial'
+        - $ref: '#/components/parameters/StationIdPwId'
+        - $ref: '#/components/parameters/DeviceType'
+      responses:
+        '200':
+          description: Raw telemetry groups and factors.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelope'
+        '4XX':
+          $ref: '#/components/responses/HttpError'
+        '5XX':
+          $ref: '#/components/responses/HttpError'
+
+  /sems-plant/api/equipments/{serial}/telecounting:
+    get:
+      tags: [Device]
+      operationId: getDeviceTelecounting
+      summary: Get device energy counters
+      security:
+        - GoodWeSession: []
+          SignatureHeader: []
+      parameters:
+        - $ref: '#/components/parameters/DeviceSerial'
+        - $ref: '#/components/parameters/StationIdPwId'
+        - $ref: '#/components/parameters/DeviceType'
+      responses:
+        '200':
+          description: Raw counter groups and factors.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelope'
+        '4XX':
+          $ref: '#/components/responses/HttpError'
+        '5XX':
+          $ref: '#/components/responses/HttpError'
+
+  /sems-plant/api/equipments/{serial}/information:
+    get:
+      tags: [Device]
+      operationId: getDeviceInformation
+      summary: Get device information
+      security:
+        - GoodWeSession: []
+          SignatureHeader: []
+      parameters:
+        - $ref: '#/components/parameters/DeviceSerial'
+        - $ref: '#/components/parameters/StationIdPwId'
+        - $ref: '#/components/parameters/DeviceType'
+      responses:
+        '200':
+          description: Raw device information records.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelope'
+        '4XX':
+          $ref: '#/components/responses/HttpError'
+        '5XX':
+          $ref: '#/components/responses/HttpError'
+
+  /sems-plant/api/stations/statistics:
+    post:
+      tags: [Station]
+      operationId: getStationStatistics
+      summary: Get historical station statistics
+      security:
+        - GoodWeSession: []
+          SignatureHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StationStatisticsRequest'
+            example:
+              stationId: 0bc16364-75c9-4564-bf7d-b4cc37f4baf1
+              isReport: false
+              items:
+                - proDischarStats
+                - proConsumStats
+                - proCharStats
+                - proSystemTotalStats
+                - proGridStats
+                - proPurchaseStats
+                - proSelfConsumStats
+              dimension: day
+              startTime: '2026-11-08 00:00:00'
+              endTime: '2026-11-08 23:59:59'
+      responses:
+        '200':
+          description: Raw statistics response, including dataList and summary fields when supplied by SEMS+.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelope'
+        '4XX':
+          $ref: '#/components/responses/HttpError'
+        '5XX':
+          $ref: '#/components/responses/HttpError'
+
+  /sems-plant/api/stations/production:
+    post:
+      tags: [Station]
+      operationId: getStationProduction
+      summary: Get daily production and income statistics
+      security:
+        - GoodWeSession: []
+          SignatureHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StationProductionRequest'
+            example:
+              stationId: 0bc16364-75c9-4564-bf7d-b4cc37f4baf1
+              items:
+                - proConsumStats
+                - profitProStats
+                - proSystemTotalStats
+                - proGridStats
+                - proPurchaseStats
+                - profitGridStats
+              dimension: day
+              isReport: false
+              startTime: '2026-11-08 00:00:00'
+              endTime: '2026-11-08 23:59:59'
+      responses:
+        '200':
+          description: Raw production and income response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelope'
+        '4XX':
+          $ref: '#/components/responses/HttpError'
+        '5XX':
+          $ref: '#/components/responses/HttpError'
+
+  /sems/sems-report/api/v2/compare/station/chart:
+    post:
+      tags: [Charts]
+      operationId: compareStationChart
+      summary: Get station chart series
+      description: |
+        Observed in the supplied Australian SEMS+ web request. The request uses
+        `reportingPeriod: day`, `dimension: hour`, and a metric descriptor for
+        SOC. Candidate parameter values are listed in StationChartRequest and
+        StationChartMetric; metric compatibility and response fields remain
+        provisional. A year reporting period with hourly dimension is too large
+        for the gateway and is rejected. Other long spans at fine dimensions
+        may also exceed response limits.
+      servers:
+        - url: https://au-gateway.semsportal.com
+          description: Australian gateway observed in the supplied request.
+      security:
+        - GoodWeSession: []
+          SignatureHeader: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StationChartRequest'
+            example:
+              stationIds:
+                - 0bc16364-75c9-4564-bf7d-b4cc37f4baf1
+              reportingPeriod: day
+              dimension: hour
+              startTime: '2026-11-08 00:00:00'
+              endTime: '2026-11-08 23:59:59'
+              metrics:
+                - metricType: real_time
+                  metric: soc
+                  unit: '%'
+      responses:
+        '200':
+          description: Raw chart response. Shape is not yet documented.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiEnvelope'
+        '4XX':
+          $ref: '#/components/responses/HttpError'
+        '5XX':
+          $ref: '#/components/responses/HttpError'
+
+components:
+  securitySchemes:
+    GoodWeSession:
+      type: apiKey
+      in: header
+      name: Token
+      description: |
+        JSON-serialized SEMS+ session object returned by cross-login. Requests
+        also require X-Signature, defined as a separate header security scheme.
+    SignatureHeader:
+      type: apiKey
+      in: header
+      name: X-Signature
+      description: Signature generated from the session timestamp, uid and token.
+
+  parameters:
+    InitialToken:
+      name: Token
+      in: header
+      required: true
+      description: Initial unauthenticated web-client token JSON; fields are empty/default before login.
+      schema:
+        type: string
+      example: '{"uid":"","timestamp":0,"token":"","client":"semsPlusWeb","version":"","language":"en"}'
+    InitialSignature:
+      name: X-Signature
+      in: header
+      required: true
+      description: Login signature generated with the current millisecond timestamp and empty uid/token.
+      schema:
+        type: string
+    CurrentLanguage:
+      name: currentLang
+      in: header
+      required: true
+      schema:
+        type: string
+        default: en
+    Neutral:
+      name: neutral
+      in: header
+      required: true
+      schema:
+        type: string
+        default: '0'
+    Uuid:
+      name: uuid
+      in: header
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Os:
+      name: os
+      in: header
+      required: true
+      schema:
+        type: string
+        default: Windows 10.0 desktop
+    Brand:
+      name: brand
+      in: header
+      required: true
+      schema:
+        type: string
+        default: Firefox 159.0 en-US Australia/Brisbane
+    StationIdQuery:
+      name: stationId
+      in: query
+      required: true
+      schema:
+        type: string
+      description: SEMS+ station identifier.
+    StationIdPwId:
+      name: pwId
+      in: query
+      required: true
+      schema:
+        type: string
+      description: Station identifier; named pwId by these device routes.
+    DeviceSerial:
+      name: serial
+      in: path
+      required: true
+      schema:
+        type: string
+    DeviceType:
+      name: deviceType
+      in: query
+      required: true
+      schema:
+        type: string
+        default: INVERTER
+      description: SEMS+ device type.
+
+  schemas:
+    LoginEnvelope:
+      allOf:
+        - $ref: '#/components/schemas/ApiEnvelope'
+        - type: object
+          properties:
+            data:
+              type: object
+              description: Session fields returned by the portal; exact response varies and is not fully documented.
+              properties:
+                uid:
+                  type: string
+                timestamp:
+                  oneOf:
+                    - type: string
+                    - type: integer
+                token:
+                  type: string
+                  writeOnly: true
+                region:
+                  type: string
+                api:
+                  type: string
+                  format: uri
+              additionalProperties: true
+
+    ApiEnvelope:
+      type: object
+      description: GoodWe JSON envelope. The client returns data when present, otherwise the full envelope.
+      properties:
+        code:
+          oneOf:
+            - type: string
+            - type: integer
+        description:
+          type: string
+        msg:
+          type: string
+        errorMsg:
+          type: string
+        hasError:
+          type: boolean
+        traceId:
+          type: string
+        data: {}
+      additionalProperties: true
+
+    StationStatisticsRequest:
+      type: object
+      required: [stationId, isReport, items, dimension, startTime, endTime]
+      properties:
+        stationId:
+          type: string
+        isReport:
+          type: boolean
+          const: false
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            enum:
+              - proDischarStats
+              - proConsumStats
+              - proCharStats
+              - proSystemTotalStats
+              - proGridStats
+              - proPurchaseStats
+              - proSelfConsumStats
+        dimension:
+          type: string
+          enum: [day, month, year]
+          description: Values exposed by the existing MCP tool.
+        startTime:
+          $ref: '#/components/schemas/PortalDateTime'
+        endTime:
+          $ref: '#/components/schemas/PortalDateTime'
+
+    StationProductionRequest:
+      type: object
+      required: [stationId, items, dimension, isReport, startTime, endTime]
+      properties:
+        stationId:
+          type: string
+        items:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            enum:
+              - proConsumStats
+              - profitProStats
+              - proSystemTotalStats
+              - proGridStats
+              - proPurchaseStats
+              - profitGridStats
+        dimension:
+          type: string
+          const: day
+        isReport:
+          type: boolean
+          const: false
+        startTime:
+          $ref: '#/components/schemas/PortalDateTime'
+        endTime:
+          $ref: '#/components/schemas/PortalDateTime'
+
+    StationChartRequest:
+      type: object
+      required: [stationIds, reportingPeriod, dimension, startTime, endTime, metrics]
+      properties:
+        stationIds:
+          type: array
+          minItems: 1
+          items:
+            type: string
+        reportingPeriod:
+          type: string
+          description: |
+            Candidate values recorded from the observed client. Valid values
+            and combinations depend on the endpoint and requested time range.
+          examples: [day]
+          enum: [day, week, month, year, hour, all]
+        dimension:
+          type: string
+          description: |
+            Candidate values recorded from the observed client. Fine dimensions
+            over long ranges can exceed gateway response limits.
+          examples: [hour]
+          enum: [minute, hour, week, day, month, year]
+        startTime:
+          $ref: '#/components/schemas/PortalDateTime'
+        endTime:
+          $ref: '#/components/schemas/PortalDateTime'
+        metrics:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/StationChartMetric'
+      not:
+        type: object
+        required: [reportingPeriod, dimension]
+        properties:
+          reportingPeriod:
+            const: year
+          dimension:
+            const: hour
+      additionalProperties: true
+
+    StationChartMetric:
+      type: object
+      required: [metricType, metric, unit]
+      properties:
+        metricType:
+          type: string
+          description: Candidate metric type values; metric compatibility is not fully documented.
+          examples: [real_time]
+          enum: [real_time, stats]
+        metric:
+          type: string
+          description: Candidate metric names recorded from the observed client.
+          examples: [soc]
+          enum: [soc, proSystemTotalStats, proCharStats, proDischarStats, pBat, pGrid, pSystem]
+        unit:
+          type: string
+          description: Unit associated with the requested metric.
+          examples: ['%']
+          enum: ['%', 'kW', 'kWh']
+      additionalProperties: true
+
+    PortalDateTime:
+      type: string
+      description: Portal-local date/time string in YYYY-MM-DD HH:mm:ss format (no timezone suffix).
+      pattern: '^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$'
+      examples: ['2026-11-08 00:00:00']
+
+  responses:
+    HttpError:
+      description: HTTP or API error; response body may use a GoodWe envelope.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ApiEnvelope'
