@@ -3,9 +3,6 @@
 Read-only MCP tools for an AI agent to query GoodWe SEMS+ directly. No analytics
 database or scheduled collector is included.
 
-The [SEMS+ tool-change skill](skills/semsplus-tool-change/SKILL.md) gives CLI
-agents a repeatable workflow for changing and validating SEMS+ tools.
-
 ## What it exposes
 
 - `test_connection`
@@ -84,7 +81,22 @@ if [ ! -f .env ]; then cp .env.example .env; fi
 Edit `.env` with your SEMS+ credentials and station ID if you have not already.
 Keep this file private.
 
-3. Register the installed command with Codex CLI:
+### Connect a CLI agent
+
+Run the matching command below from the repository root. Each command registers
+the local stdio server and passes the path to `.env`; your SEMS+ credentials
+remain in that private file.
+
+**Claude Code** ([MCP setup](https://code.claude.com/docs/en/mcp)):
+
+```bash
+claude mcp add --transport stdio --scope user \
+  --env GOODWE_ENV_FILE="$(pwd)/.env" \
+  goodwe-semsplus -- "$(pwd)/.venv/bin/goodwe-semsplus-mcp"
+claude mcp list
+```
+
+**Codex CLI** ([MCP setup](https://developers.openai.com/codex/mcp/)):
 
 ```bash
 codex mcp add goodwe-semsplus \
@@ -93,13 +105,23 @@ codex mcp add goodwe-semsplus \
 codex mcp list
 ```
 
-Codex will launch the server over stdio. Restart Codex after registering it;
-the GoodWe tools will then be available in Codex sessions. The environment file
-path is stored in Codex configuration, while the SEMS+ credentials stay in
-`.env`. See the [Codex MCP guide](https://developers.openai.com/codex/mcp/) for
-other configuration options.
+**Gemini CLI** ([MCP setup](https://github.com/google-gemini/gemini-cli/blob/main/docs/tools/mcp-server.md)):
 
-To remove the server later, run `codex mcp remove goodwe-semsplus`.
+```bash
+gemini mcp add --scope user --transport stdio \
+  --env GOODWE_ENV_FILE="$(pwd)/.env" \
+  goodwe-semsplus "$(pwd)/.venv/bin/goodwe-semsplus-mcp"
+gemini mcp list
+```
+
+Gemini CLI only reports a local stdio server as connected when the current
+folder is trusted. If needed, run `gemini trust` from this repository.
+
+For another MCP-compatible CLI, register the executable as a local stdio
+server and set `GOODWE_ENV_FILE` to the absolute path of this repository's
+`.env`. See that client's MCP configuration guide for its syntax. To remove
+the server later, use `claude mcp remove goodwe-semsplus`,
+`codex mcp remove goodwe-semsplus`, or `gemini mcp remove goodwe-semsplus`.
 
 To run the MCP server manually for local development:
 
