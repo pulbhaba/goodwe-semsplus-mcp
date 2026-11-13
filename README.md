@@ -81,7 +81,98 @@ if [ ! -f .env ]; then cp .env.example .env; fi
 Edit `.env` with your SEMS+ credentials and station ID if you have not already.
 Keep this file private.
 
-3. Register the installed command with Codex CLI:
+### Environment variables
+
+The server reads these settings from its process environment or `.env`.
+`GOODWE_ENV_FILE` selects the env file; its default is `.env` relative to the
+server's working directory. The CLI commands below pass an absolute path so
+the server can find this repository's file regardless of the client's working
+directory.
+
+| Variable | Required | Default | Purpose |
+| --- | --- | --- | --- |
+| `GOODWE_USERNAME` | Yes | — | SEMS+ account username |
+| `GOODWE_PASSWORD` | Yes | — | SEMS+ account password |
+| `GOODWE_STATION_ID` | Yes | — | Station queried by default |
+| `GOODWE_REGION` | No | `au` | SEMS+ region code |
+| `GOODWE_DEVICE_LIST` | No | empty | Optional JSON array of device records, such as `[ {"sn": "...", "deviceType": "INVERTER"} ]` |
+| `REQUEST_TIMEOUT` | No | `30` | HTTP request timeout in seconds |
+| `MCP_TRANSPORT` | No | `stdio` | MCP transport: `stdio` or `streamable-http` |
+| `MCP_HOST` | No | `127.0.0.1` | HTTP listener bind address |
+| `MCP_PORT` | No | `8000` | HTTP listener port |
+| `GOODWE_ENV_FILE` | No | `.env` | Path to the env file loaded by the server |
+
+Local CLI agents use stdio, so the `MCP_TRANSPORT`, `MCP_HOST`, and `MCP_PORT`
+settings are usually left at their defaults.
+
+### Pass values from your shell or Windows environment
+
+Instead of using `.env`, you can define the required settings in your shell and
+map them into the MCP server process. For Bash or Zsh, put the exports in
+`~/.bashrc` or `~/.zshrc`, then start the CLI from that shell:
+
+```bash
+export GOODWE_USERNAME="your-semsplus-username"
+export GOODWE_PASSWORD="your-semsplus-password"
+export GOODWE_STATION_ID="your-station-id"
+export GOODWE_REGION="au"
+```
+
+On Windows, set user environment variables in Windows Settings or PowerShell;
+for example, this sets them for future terminals:
+
+```powershell
+[Environment]::SetEnvironmentVariable("GOODWE_USERNAME", "your-semsplus-username", "User")
+[Environment]::SetEnvironmentVariable("GOODWE_PASSWORD", "your-semsplus-password", "User")
+[Environment]::SetEnvironmentVariable("GOODWE_STATION_ID", "your-station-id", "User")
+[Environment]::SetEnvironmentVariable("GOODWE_REGION", "au", "User")
+```
+
+Open a new terminal after changing persistent variables, then launch the CLI
+from it. Pass the variable names through the agent's MCP configuration without
+writing their secret values into that config. The following `env` fragment goes
+inside the `goodwe-semsplus` server entry in Claude Code's `.mcp.json` or Gemini
+CLI's `settings.json`. Claude Code [expands `${VAR}` references](https://code.claude.com/docs/en/mcp);
+Gemini CLI [supports `$VAR`, `${VAR}`, and Windows `%VAR%` references](https://github.com/google-gemini/gemini-cli/blob/main/docs/tools/mcp-server.md):
+
+```json
+"env": {
+  "GOODWE_USERNAME": "${GOODWE_USERNAME}",
+  "GOODWE_PASSWORD": "${GOODWE_PASSWORD}",
+  "GOODWE_STATION_ID": "${GOODWE_STATION_ID}"
+}
+```
+
+Add optional settings to `env` when you want to override their defaults.
+
+Codex CLI's [`env_vars` option](https://developers.openai.com/codex/mcp/) in
+`~/.codex/config.toml` forwards named values from the local environment:
+
+```toml
+[mcp_servers.goodwe-semsplus]
+command = "/absolute/path/to/.venv/bin/goodwe-semsplus-mcp"
+env_vars = ["GOODWE_USERNAME", "GOODWE_PASSWORD", "GOODWE_STATION_ID"]
+```
+
+If you use `.env`, keep the `GOODWE_ENV_FILE` setting in the CLI examples below
+instead of mapping individual credential variables.
+
+### Connect a CLI agent
+
+Run the matching command below from the repository root. Each command registers
+the local stdio server and passes the path to `.env`; your SEMS+ credentials
+remain in that private file.
+
+**Claude Code** ([MCP setup](https://code.claude.com/docs/en/mcp)):
+
+```bash
+claude mcp add --transport stdio --scope user \
+  --env GOODWE_ENV_FILE="$(pwd)/.env" \
+  goodwe-semsplus -- "$(pwd)/.venv/bin/goodwe-semsplus-mcp"
+claude mcp list
+```
+
+**Codex CLI** ([MCP setup](https://developers.openai.com/codex/mcp/)):
 
 ```bash
 codex mcp add goodwe-semsplus \
@@ -90,13 +181,23 @@ codex mcp add goodwe-semsplus \
 codex mcp list
 ```
 
-Codex will launch the server over stdio. Restart Codex after registering it;
-the GoodWe tools will then be available in Codex sessions. The environment file
-path is stored in Codex configuration, while the SEMS+ credentials stay in
-`.env`. See the [Codex MCP guide](https://developers.openai.com/codex/mcp/) for
-other configuration options.
+**Gemini CLI** ([MCP setup](https://github.com/google-gemini/gemini-cli/blob/main/docs/tools/mcp-server.md)):
 
-To remove the server later, run `codex mcp remove goodwe-semsplus`.
+```bash
+gemini mcp add --scope user --transport stdio \
+  --env GOODWE_ENV_FILE="$(pwd)/.env" \
+  goodwe-semsplus "$(pwd)/.venv/bin/goodwe-semsplus-mcp"
+gemini mcp list
+```
+
+Gemini CLI only reports a local stdio server as connected when the current
+folder is trusted. If needed, run `gemini trust` from this repository.
+
+For another MCP-compatible CLI, register the executable as a local stdio
+server and set `GOODWE_ENV_FILE` to the absolute path of this repository's
+`.env`. See that client's MCP configuration guide for its syntax. To remove
+the server later, use `claude mcp remove goodwe-semsplus`,
+`codex mcp remove goodwe-semsplus`, or `gemini mcp remove goodwe-semsplus`.
 
 To run the MCP server manually for local development:
 
