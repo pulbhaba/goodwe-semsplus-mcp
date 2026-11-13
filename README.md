@@ -3,6 +3,9 @@
 Read-only MCP tools for an AI agent to query GoodWe SEMS+ directly. No analytics
 database or scheduled collector is included.
 
+The [SEMS+ tool-change skill](skills/semsplus-tool-change/SKILL.md) gives CLI
+agents a repeatable workflow for changing and validating SEMS+ tools.
+
 ## What it exposes
 
 - `test_connection`
